@@ -1,0 +1,10 @@
+node_modules
+dist
+dist-electron
+release
+*.log
+.DS_Store
+models/*.onnx
+models/*.json
+models/*.txt
+!models/README.md
