@@ -12,10 +12,13 @@ import { ElMessage } from 'element-plus'
 const props = defineProps<{
   modelValue: boolean
   image: ImageRecord | null
+  /** 当前处于以图搜图结果中，可与被搜图对比 */
+  comparable?: boolean
 }>()
 const emit = defineEmits<{
   (e: 'update:modelValue', v: boolean): void
   (e: 'search-similar', img: ImageRecord): void
+  (e: 'compare', img: ImageRecord): void
 }>()
 
 const store = useAppStore()
@@ -81,6 +84,13 @@ function onSearchSimilar() {
   }
 }
 
+function onCompare() {
+  if (props.image) {
+    emit('compare', props.image)
+    visible.value = false
+  }
+}
+
 async function onDelete() {
   if (!props.image) return
   await store.deleteImage(props.image.id)
@@ -116,6 +126,9 @@ watch(visible, (v) => {
           </el-button>
           <el-button type="primary" @click="onSearchSimilar">
             <el-icon><Search /></el-icon> 以图搜图
+          </el-button>
+          <el-button v-if="comparable" @click="onCompare">
+            <el-icon><Switch /></el-icon> 与被搜图对比
           </el-button>
           <el-button type="danger" plain @click="onDelete">
             <el-icon><Delete /></el-icon> 删除

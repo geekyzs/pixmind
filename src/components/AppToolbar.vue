@@ -2,18 +2,39 @@
 import { ref, computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useAppStore } from '@/stores/app'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 /**
- * 顶部工具栏：文本搜图、上传图片搜相似、关键词筛选、排序、网格大小调节、搜索结果标识。
+ * 顶部工具栏：文本搜图、上传图片搜相似、关键词筛选、排序、网格大小调节、搜索结果标识、批量多选。
  */
 const store = useAppStore()
-const { settings, searchMode, searchLabel, total, displayImages, sortBy, order } =
-  storeToRefs(store)
+const {
+  settings,
+  searchMode,
+  searchLabel,
+  total,
+  displayImages,
+  sortBy,
+  order,
+  querySource,
+  canCompare,
+  selectionMode,
+  selectedCount,
+  allSelected
+} = storeToRefs(store)
+
+const emit = defineEmits<{
+  (e: 'compare'): void
+}>()
 
 const searchText = ref('')
 const keyword = ref('')
 const uploading = ref(false)
+
+/** 被搜图缩略图：让用户始终知道当前结果是基于哪张图检索的 */
+const querySrc = computed(() =>
+  querySource.value ? `pixmind://${encodeURIComponent(querySource.value.path)}` : ''
+)
 
 async function onSearch() {
   if (searchText.value.trim()) {
@@ -59,10 +80,34 @@ function onSortChange(val: string) {
 }
 
 const sortValue = computed(() => `${sortBy.value}:${order.value}`)
+
+/* ------------------------------ 多选批量删除 ------------------------------ */
+
+function onToggleAll() {
+  if (allSelected.value) store.clearSelection()
+  else store.selectAll()
+}
+
+async function onDeleteSelected() {
+  const n = selectedCount.value
+  if (!n) return
+  try {
+    await ElMessageBox.confirm(
+      `确定删除选中的 ${n} 张图片？文件将被移入系统回收站。`,
+      '批量删除',
+      { type: 'warning', confirmButtonText: '删除', confirmButtonClass: 'el-button--danger' }
+    )
+    const deleted = await store.deleteSelected()
+    ElMessage.success(`已将 ${deleted} 张图片移入回收站`)
+  } catch {
+    /* 取消 */
+  }
+}
 </script>
 
 <template>
-  <header class="toolbar no-select">
+  <div class="toolbar-wrap">
+    <header class="toolbar no-select">
     <div class="search-box">
       <el-input
         v-model="searchText"
@@ -82,6 +127,23 @@ const sortValue = computed(() => `${sortBy.value}:${order.value}`)
       <el-icon><UploadFilled /></el-icon>
       <span class="btn-text">上传图片搜相似</span>
     </el-button>
+
+    <div v-if="querySource" class="query-chip" :title="querySource.path">
+      <img :src="querySrc" alt="被搜图" />
+      <div class="q-text">
+        <span class="q-title">被搜图</span>
+        <span class="q-name">{{ querySource.filename }}</span>
+      </div>
+      <el-button
+        size="small"
+        type="primary"
+        :disabled="!canCompare"
+        @click="emit('compare')"
+      >
+        <el-icon><Switch /></el-icon>
+        <span class="btn-text">对比</span>
+      </el-button>
+    </div>
 
     <div class="filters">
       <el-input
@@ -116,12 +178,45 @@ const sortValue = computed(() => `${sortBy.value}:${order.value}`)
     </div>
 
     <div class="status">
+      <el-button
+        :type="selectionMode ? 'primary' : 'default'"
+        @click="store.toggleSelectionMode()"
+      >
+        <el-icon><Select /></el-icon>
+        <span class="btn-text">{{ selectionMode ? '退出多选' : '多选' }}</span>
+      </el-button>
       <el-tag v-if="searchMode !== 'none'" type="success" closable @close="clearSearch">
         {{ searchLabel }} · {{ displayImages.length }} 项
       </el-tag>
       <span v-else class="count">共 {{ total }} 张</span>
     </div>
   </header>
+
+  <!-- 多选模式下的批量操作条 -->
+  <div v-if="selectionMode" class="batch-bar no-select">
+    <el-checkbox
+      :model-value="allSelected"
+      :indeterminate="selectedCount > 0 && !allSelected"
+      @change="onToggleAll"
+    >
+      全选
+    </el-checkbox>
+    <span class="sel-count">已选 {{ selectedCount }} 项</span>
+    <el-button size="small" text :disabled="!selectedCount" @click="store.clearSelection()">
+      清空选择
+    </el-button>
+    <div class="spacer" />
+    <el-button
+      type="danger"
+      size="small"
+      :disabled="!selectedCount"
+      @click="onDeleteSelected"
+    >
+      <el-icon><Delete /></el-icon>
+      删除选中（{{ selectedCount }}）
+    </el-button>
+  </div>
+  </div>
 </template>
 
 <style scoped>
@@ -150,12 +245,62 @@ const sortValue = computed(() => `${sortBy.value}:${order.value}`)
 }
 .status {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 .count {
   font-size: 13px;
   color: var(--pm-text-soft);
 }
+.batch-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--pm-border);
+  background: var(--pm-bg-soft);
+}
+.batch-bar .sel-count {
+  font-size: 13px;
+  color: var(--pm-text-soft);
+}
+.batch-bar .spacer {
+  flex: 1;
+}
 .btn-text {
   margin-left: 4px;
+}
+.query-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 4px 4px;
+  border: 1px solid var(--pm-border);
+  border-radius: 8px;
+  background: var(--pm-bg-soft);
+  flex-shrink: 0;
+}
+.query-chip img {
+  width: 34px;
+  height: 34px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+.q-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  max-width: 130px;
+}
+.q-title {
+  font-size: 11px;
+  color: var(--pm-text-soft);
+}
+.q-name {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

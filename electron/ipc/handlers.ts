@@ -1,7 +1,9 @@
 import { ipcMain, dialog, BrowserWindow, shell } from 'electron'
 import fs from 'node:fs'
+import path from 'node:path'
+import sharp from 'sharp'
 import { IPC } from '../../shared/types'
-import type { PageQuery, SearchFilter, AppSettings } from '../../shared/types'
+import type { PageQuery, SearchFilter, AppSettings, FileMeta } from '../../shared/types'
 import { dirRepo, imageRepo, tagRepo, settingsRepo, embeddingRepo } from '../db/repository'
 import { scanDir } from '../scanner/scanner'
 import { watchManager } from '../scanner/watcher'
@@ -9,6 +11,7 @@ import { embeddingManager } from '../embedding/embeddingManager'
 import { searchService } from '../search/searchService'
 import { getSearchEngine } from '../search/engineFactory'
 import { getThumbnail } from '../scanner/thumbnail'
+import { getFormat } from '../scanner/fileUtils'
 import { bus, BusEvent } from '../core/bus'
 import type { TaskProgress } from '../../shared/types'
 
@@ -62,6 +65,21 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
 
   /* ------------------------------- 图片 -------------------------------- */
 
+  /** 删除单张：移入系统回收站，并清理索引、向量、通知渲染进程 */
+  async function deleteOne(id: number): Promise<boolean> {
+    const img = imageRepo.get(id)
+    if (!img) return false
+    try {
+      if (fs.existsSync(img.path)) await shell.trashItem(img.path)
+    } catch {
+      /* 忽略回收站失败，仍继续清理索引 */
+    }
+    imageRepo.removeByPath(img.path)
+    await getSearchEngine().remove(id)
+    bus.emit(BusEvent.IMAGE_REMOVED, id)
+    return true
+  }
+
   ipcMain.handle(IPC.IMG_PAGE, (_e, q: PageQuery) => imageRepo.page(q))
 
   ipcMain.handle(IPC.IMG_GET, (_e, id: number) => imageRepo.get(id))
@@ -78,18 +96,43 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   })
 
   ipcMain.handle(IPC.IMG_DELETE, async (_e, id: number) => {
-    const img = imageRepo.get(id)
-    if (!img) return false
-    // 移到回收站
-    try {
-      if (fs.existsSync(img.path)) await shell.trashItem(img.path)
-    } catch {
-      /* 忽略 */
+    return deleteOne(id)
+  })
+
+  // 批量删除：逐张移入回收站并清理索引/向量，返回成功删除的数量
+  ipcMain.handle(IPC.IMG_DELETE_MANY, async (_e, ids: number[]) => {
+    let deleted = 0
+    for (const id of ids) {
+      if (await deleteOne(id)) deleted++
     }
-    imageRepo.removeByPath(img.path)
-    await getSearchEngine().remove(id)
-    bus.emit(BusEvent.IMAGE_REMOVED, id)
-    return true
+    return deleted
+  })
+
+  // 读取任意本地图片的元信息：外部查询图未入库，对比视图需要它来展示尺寸/体积差异
+  ipcMain.handle(IPC.IMG_FILE_META, async (_e, filePath: string): Promise<FileMeta | null> => {
+    try {
+      const stat = await fs.promises.stat(filePath)
+      let width = 0
+      let height = 0
+      try {
+        const meta = await sharp(filePath).metadata()
+        width = meta.width || 0
+        height = meta.height || 0
+      } catch {
+        // 元数据读取失败不影响其余字段
+      }
+      return {
+        path: filePath,
+        filename: path.basename(filePath),
+        width,
+        height,
+        size: stat.size,
+        format: getFormat(filePath),
+        mtime: Math.floor(stat.mtimeMs)
+      }
+    } catch {
+      return null
+    }
   })
 
   /* ------------------------------- 搜索 -------------------------------- */

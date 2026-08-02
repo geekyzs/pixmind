@@ -6,8 +6,22 @@ import type {
   Tag,
   SearchFilter,
   TaskProgress,
-  AppSettings
+  AppSettings,
+  FileMeta
 } from '@shared/types'
+
+/**
+ * 查询源（即「被搜图」）
+ * 以图搜图时记录本次检索所用的图片，供结果对比视图作为基准图使用。
+ * 库内图片带 imageId，外部上传/拖入的图片只有路径与文件元信息。
+ */
+export interface QuerySource {
+  kind: 'library' | 'external'
+  path: string
+  filename: string
+  imageId?: number
+  meta?: FileMeta | null
+}
 
 /**
  * 将 Vue reactive 对象转为可结构化克隆的纯对象。
@@ -45,6 +59,12 @@ export const useAppStore = defineStore('app', () => {
   const searchScores = ref<Map<number, number>>(new Map())
   const searchMode = ref<'none' | 'text' | 'image'>('none')
   const searchLabel = ref('')
+  // 本次以图搜图的「被搜图」，文本搜图时为 null
+  const querySource = ref<QuerySource | null>(null)
+
+  // 多选：selectionMode 打开后网格进入勾选模式，selectedIds 保存已选图片 id
+  const selectionMode = ref(false)
+  const selectedIds = ref<Set<number>>(new Set())
 
   const progress = ref<TaskProgress>({ type: 'scan', total: 0, done: 0, running: false })
   const loading = ref(false)
@@ -56,6 +76,15 @@ export const useAppStore = defineStore('app', () => {
   /* --------------------------- getters --------------------------- */
   const displayImages = computed(() => (searchResults.value ? searchResults.value : images.value))
   const isSearching = computed(() => searchMode.value !== 'none')
+  /** 只有以图搜图且存在结果时才能进入「被搜图 vs 结果」对比 */
+  const canCompare = computed(
+    () => !!querySource.value && !!searchResults.value && searchResults.value.length > 0
+  )
+  const selectedCount = computed(() => selectedIds.value.size)
+  /** 是否已全选当前展示的图片 */
+  const allSelected = computed(
+    () => displayImages.value.length > 0 && selectedIds.value.size === displayImages.value.length
+  )
   const progressPercent = computed(() =>
     progress.value.total > 0 ? Math.round((progress.value.done / progress.value.total) * 100) : 0
   )
@@ -161,6 +190,7 @@ export const useAppStore = defineStore('app', () => {
     loading.value = true
     try {
       const results = await window.api.searchByText(text, 200, plain(filter.value))
+      querySource.value = null
       applySearchResults(results, 'text', `文本："${text}"`)
     } finally {
       loading.value = false
@@ -171,6 +201,27 @@ export const useAppStore = defineStore('app', () => {
     loading.value = true
     try {
       const results = await window.api.searchByImage({ imageId }, 200, plain(filter.value))
+      const img =
+        images.value.find((i) => i.id === imageId) ??
+        searchResults.value?.find((i) => i.id === imageId) ??
+        (await window.api.imgGet(imageId))
+      querySource.value = img
+        ? {
+            kind: 'library',
+            imageId,
+            path: img.path,
+            filename: img.filename,
+            meta: {
+              path: img.path,
+              filename: img.filename,
+              width: img.width,
+              height: img.height,
+              size: img.size,
+              format: img.format,
+              mtime: img.mtime
+            }
+          }
+        : null
       applySearchResults(results, 'image', '以图搜图')
     } finally {
       loading.value = false
@@ -181,6 +232,14 @@ export const useAppStore = defineStore('app', () => {
     loading.value = true
     try {
       const results = await window.api.searchByImage({ filePath }, 200, plain(filter.value))
+      // 外部图片未入库，需单独读取文件元信息用于对比展示
+      const meta = await window.api.imgFileMeta(filePath)
+      querySource.value = {
+        kind: 'external',
+        path: filePath,
+        filename: meta?.filename ?? filePath.split(/[/\\]/).pop() ?? filePath,
+        meta
+      }
       applySearchResults(results, 'image', '以图搜图（外部）')
     } finally {
       loading.value = false
@@ -204,6 +263,8 @@ export const useAppStore = defineStore('app', () => {
     searchScores.value = new Map(results.map((r) => [r.image.id, r.score]))
     searchMode.value = mode
     searchLabel.value = label
+    // 结果集变化，旧的选中项不再适用
+    clearSelection()
   }
 
   function clearSearch() {
@@ -211,6 +272,14 @@ export const useAppStore = defineStore('app', () => {
     searchScores.value = new Map()
     searchMode.value = 'none'
     searchLabel.value = ''
+    querySource.value = null
+    clearSelection()
+  }
+
+  /** 取某张结果图的相似度（0~1），不在结果集中则为 null */
+  function scoreOf(imageId: number): number | null {
+    const s = searchScores.value.get(imageId)
+    return s == null ? null : s
   }
 
   /* --------------------------- 图片操作 --------------------------- */
@@ -226,6 +295,44 @@ export const useAppStore = defineStore('app', () => {
     images.value = images.value.filter((i) => i.id !== id)
     if (searchResults.value) searchResults.value = searchResults.value.filter((i) => i.id !== id)
     total.value = Math.max(0, total.value - 1)
+  }
+
+  /* ---------------------------- 多选与批量删除 ---------------------------- */
+
+  function toggleSelectionMode(on?: boolean) {
+    selectionMode.value = on ?? !selectionMode.value
+    if (!selectionMode.value) clearSelection()
+  }
+
+  function toggleSelect(id: number) {
+    const s = new Set(selectedIds.value)
+    if (s.has(id)) s.delete(id)
+    else s.add(id)
+    selectedIds.value = s
+  }
+
+  function selectAll() {
+    selectedIds.value = new Set(displayImages.value.map((i) => i.id))
+  }
+
+  function clearSelection() {
+    selectedIds.value = new Set()
+  }
+
+  /** 批量删除选中图片（移入回收站），完成后退出多选模式 */
+  async function deleteSelected(): Promise<number> {
+    const ids = [...selectedIds.value]
+    if (!ids.length) return 0
+    const idSet = new Set(ids)
+    const deleted = await window.api.imgDeleteMany(ids)
+    // 主进程会逐条 emit image-removed 同步列表，这里兜底并修正 total
+    images.value = images.value.filter((i) => !idSet.has(i.id))
+    if (searchResults.value)
+      searchResults.value = searchResults.value.filter((i) => !idSet.has(i.id))
+    total.value = Math.max(0, total.value - deleted)
+    clearSelection()
+    selectionMode.value = false
+    return deleted
   }
 
   /* ------------------------ 事件监听（实时更新） ------------------------ */
@@ -278,11 +385,17 @@ export const useAppStore = defineStore('app', () => {
     searchScores,
     searchMode,
     searchLabel,
+    querySource,
+    selectionMode,
+    selectedIds,
     progress,
     loading,
     // getters
     displayImages,
     isSearching,
+    canCompare,
+    selectedCount,
+    allSelected,
     progressPercent,
     // actions
     loadSettings,
@@ -303,8 +416,14 @@ export const useAppStore = defineStore('app', () => {
     searchByImagePath,
     uploadAndSearch,
     clearSearch,
+    scoreOf,
     toggleFavorite,
     deleteImage,
+    toggleSelectionMode,
+    toggleSelect,
+    selectAll,
+    clearSelection,
+    deleteSelected,
     bindEvents
   }
 })
