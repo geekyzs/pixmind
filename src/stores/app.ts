@@ -62,6 +62,10 @@ export const useAppStore = defineStore('app', () => {
   // 本次以图搜图的「被搜图」，文本搜图时为 null
   const querySource = ref<QuerySource | null>(null)
 
+  // 多选：selectionMode 打开后网格进入勾选模式，selectedIds 保存已选图片 id
+  const selectionMode = ref(false)
+  const selectedIds = ref<Set<number>>(new Set())
+
   const progress = ref<TaskProgress>({ type: 'scan', total: 0, done: 0, running: false })
   const loading = ref(false)
 
@@ -75,6 +79,11 @@ export const useAppStore = defineStore('app', () => {
   /** 只有以图搜图且存在结果时才能进入「被搜图 vs 结果」对比 */
   const canCompare = computed(
     () => !!querySource.value && !!searchResults.value && searchResults.value.length > 0
+  )
+  const selectedCount = computed(() => selectedIds.value.size)
+  /** 是否已全选当前展示的图片 */
+  const allSelected = computed(
+    () => displayImages.value.length > 0 && selectedIds.value.size === displayImages.value.length
   )
   const progressPercent = computed(() =>
     progress.value.total > 0 ? Math.round((progress.value.done / progress.value.total) * 100) : 0
@@ -254,6 +263,8 @@ export const useAppStore = defineStore('app', () => {
     searchScores.value = new Map(results.map((r) => [r.image.id, r.score]))
     searchMode.value = mode
     searchLabel.value = label
+    // 结果集变化，旧的选中项不再适用
+    clearSelection()
   }
 
   function clearSearch() {
@@ -262,6 +273,7 @@ export const useAppStore = defineStore('app', () => {
     searchMode.value = 'none'
     searchLabel.value = ''
     querySource.value = null
+    clearSelection()
   }
 
   /** 取某张结果图的相似度（0~1），不在结果集中则为 null */
@@ -283,6 +295,44 @@ export const useAppStore = defineStore('app', () => {
     images.value = images.value.filter((i) => i.id !== id)
     if (searchResults.value) searchResults.value = searchResults.value.filter((i) => i.id !== id)
     total.value = Math.max(0, total.value - 1)
+  }
+
+  /* ---------------------------- 多选与批量删除 ---------------------------- */
+
+  function toggleSelectionMode(on?: boolean) {
+    selectionMode.value = on ?? !selectionMode.value
+    if (!selectionMode.value) clearSelection()
+  }
+
+  function toggleSelect(id: number) {
+    const s = new Set(selectedIds.value)
+    if (s.has(id)) s.delete(id)
+    else s.add(id)
+    selectedIds.value = s
+  }
+
+  function selectAll() {
+    selectedIds.value = new Set(displayImages.value.map((i) => i.id))
+  }
+
+  function clearSelection() {
+    selectedIds.value = new Set()
+  }
+
+  /** 批量删除选中图片（移入回收站），完成后退出多选模式 */
+  async function deleteSelected(): Promise<number> {
+    const ids = [...selectedIds.value]
+    if (!ids.length) return 0
+    const idSet = new Set(ids)
+    const deleted = await window.api.imgDeleteMany(ids)
+    // 主进程会逐条 emit image-removed 同步列表，这里兜底并修正 total
+    images.value = images.value.filter((i) => !idSet.has(i.id))
+    if (searchResults.value)
+      searchResults.value = searchResults.value.filter((i) => !idSet.has(i.id))
+    total.value = Math.max(0, total.value - deleted)
+    clearSelection()
+    selectionMode.value = false
+    return deleted
   }
 
   /* ------------------------ 事件监听（实时更新） ------------------------ */
@@ -336,12 +386,16 @@ export const useAppStore = defineStore('app', () => {
     searchMode,
     searchLabel,
     querySource,
+    selectionMode,
+    selectedIds,
     progress,
     loading,
     // getters
     displayImages,
     isSearching,
     canCompare,
+    selectedCount,
+    allSelected,
     progressPercent,
     // actions
     loadSettings,
@@ -365,6 +419,11 @@ export const useAppStore = defineStore('app', () => {
     scoreOf,
     toggleFavorite,
     deleteImage,
+    toggleSelectionMode,
+    toggleSelect,
+    selectAll,
+    clearSelection,
+    deleteSelected,
     bindEvents
   }
 })

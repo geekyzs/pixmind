@@ -15,6 +15,10 @@ const props = defineProps<{
   scores?: Map<number, number> // 搜索相似度分数
   /** 是否允许与「被搜图」对比（仅以图搜图结果有意义） */
   comparable?: boolean
+  /** 多选模式：单击切换勾选而非打开预览 */
+  selectionMode?: boolean
+  /** 已选中的图片 id 集合 */
+  selectedIds?: Set<number>
 }>()
 
 const emit = defineEmits<{
@@ -22,7 +26,18 @@ const emit = defineEmits<{
   (e: 'reach-end'): void
   (e: 'context', img: ImageRecord, event: MouseEvent): void
   (e: 'compare', img: ImageRecord): void
+  (e: 'toggle-select', img: ImageRecord): void
 }>()
+
+function isSelected(id: number): boolean {
+  return props.selectedIds?.has(id) ?? false
+}
+
+/** 单击：多选模式下切换勾选，否则打开预览 */
+function onCellClick(img: ImageRecord, index: number) {
+  if (props.selectionMode) emit('toggle-select', img)
+  else emit('open', img, index)
+}
 
 const container = ref<HTMLElement | null>(null)
 const scrollTop = ref(0)
@@ -137,17 +152,27 @@ function scoreLevel(id: number): 'high' | 'mid' | 'low' | null {
         v-for="cell in visibleCells"
         :key="cell.img.id"
         class="cell"
-        :class="scoreLevel(cell.img.id) ? `sim-${scoreLevel(cell.img.id)}` : ''"
+        :class="[
+          scoreLevel(cell.img.id) ? `sim-${scoreLevel(cell.img.id)}` : '',
+          { selected: isSelected(cell.img.id), selecting: selectionMode }
+        ]"
         :style="{
           transform: `translate(${cell.left}px, ${cell.top}px)`,
           width: itemSize + 'px',
           height: cellHeight + 'px'
         }"
-        @click="emit('open', cell.img, cell.index)"
+        @click="onCellClick(cell.img, cell.index)"
         @contextmenu.prevent="emit('context', cell.img, $event)"
       >
         <div class="thumb-wrap" :style="{ height: itemSize + 'px' }">
           <LazyThumb :path="cell.img.path" />
+          <div
+            v-if="selectionMode"
+            class="checkbox"
+            :class="{ checked: isSelected(cell.img.id) }"
+          >
+            <el-icon v-if="isSelected(cell.img.id)"><Check /></el-icon>
+          </div>
           <div v-if="cell.img.favorite" class="badge fav">
             <el-icon><StarFilled /></el-icon>
           </div>
@@ -156,15 +181,13 @@ function scoreLevel(id: number): 'high' | 'mid' | 'low' | null {
             class="badge score"
             :class="`score-${scoreLevel(cell.img.id)}`"
           >
-            <el-icon v-if="scoreLevel(cell.img.id) === 'high'" class="score-icon"><Check /></el-icon>
             {{ scoreText(cell.img.id) }}
           </div>
-          <div v-if="scoreLevel(cell.img.id) === 'high'" class="top-flag">极相似</div>
           <div v-if="!cell.img.embedded" class="badge pending" title="等待生成 Embedding">
             <el-icon><Clock /></el-icon>
           </div>
           <button
-            v-if="comparable"
+            v-if="comparable && !selectionMode"
             class="compare-btn"
             title="与被搜图对比"
             @click.stop="emit('compare', cell.img)"
@@ -209,6 +232,36 @@ function scoreLevel(id: number): 'high' | 'mid' | 'low' | null {
 }
 .cell:hover {
   outline: 2px solid var(--pm-primary);
+}
+/* 多选模式：选中态高亮 */
+.cell.selected {
+  outline: 2px solid var(--pm-primary);
+  box-shadow: 0 0 0 1px var(--pm-primary), 0 4px 18px rgba(64, 158, 255, 0.35);
+}
+.cell.selecting {
+  cursor: pointer;
+}
+/* 勾选框 */
+.checkbox {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 2;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 13px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+.checkbox.checked {
+  background: var(--pm-primary);
+  border-color: var(--pm-primary);
 }
 /* 高相似度：绿色高亮边框 + 轻微放大 */
 .cell.sim-high {
@@ -268,23 +321,6 @@ function scoreLevel(id: number): 'high' | 'mid' | 'low' | null {
 }
 .badge.score.score-low {
   background: rgba(120, 120, 130, 0.8);
-}
-.score-icon {
-  font-size: 12px;
-}
-/* 高相似度左上角标 */
-.top-flag {
-  position: absolute;
-  top: 6px;
-  left: 6px;
-  font-size: 11px;
-  font-weight: 700;
-  color: #fff;
-  background: linear-gradient(135deg, #35c46a, #2aa85a);
-  padding: 2px 8px;
-  border-radius: 6px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-  letter-spacing: 1px;
 }
 .badge.pending {
   top: 6px;

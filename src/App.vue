@@ -12,7 +12,8 @@ import type { ImageRecord } from '@shared/types'
 import { ElMessage } from 'element-plus'
 
 const store = useAppStore()
-const { displayImages, settings, searchScores, isSearching, canCompare } = storeToRefs(store)
+const { displayImages, settings, searchScores, isSearching, canCompare, selectionMode, selectedIds } =
+  storeToRefs(store)
 
 const previewVisible = ref(false)
 const currentImage = ref<ImageRecord | null>(null)
@@ -91,10 +92,13 @@ onMounted(async () => {
           :gap="gap"
           :scores="isSearching ? searchScores : undefined"
           :comparable="canCompare"
+          :selection-mode="selectionMode"
+          :selected-ids="selectedIds"
           @open="openPreview"
           @reach-end="onReachEnd"
           @context="onContext"
           @compare="openCompare"
+          @toggle-select="store.toggleSelect($event.id)"
         />
       </div>
       <StatusBar />

@@ -33,6 +33,8 @@ const api = {
   imgFavorite: (id: number, favorite: boolean): Promise<boolean> =>
     ipcRenderer.invoke(IPC.IMG_FAVORITE, id, favorite),
   imgDelete: (id: number): Promise<boolean> => ipcRenderer.invoke(IPC.IMG_DELETE, id),
+  imgDeleteMany: (ids: number[]): Promise<number> =>
+    ipcRenderer.invoke(IPC.IMG_DELETE_MANY, ids),
   imgFileMeta: (filePath: string): Promise<FileMeta | null> =>
     ipcRenderer.invoke(IPC.IMG_FILE_META, filePath),
 

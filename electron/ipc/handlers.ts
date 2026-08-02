@@ -65,6 +65,21 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
 
   /* ------------------------------- 图片 -------------------------------- */
 
+  /** 删除单张：移入系统回收站，并清理索引、向量、通知渲染进程 */
+  async function deleteOne(id: number): Promise<boolean> {
+    const img = imageRepo.get(id)
+    if (!img) return false
+    try {
+      if (fs.existsSync(img.path)) await shell.trashItem(img.path)
+    } catch {
+      /* 忽略回收站失败，仍继续清理索引 */
+    }
+    imageRepo.removeByPath(img.path)
+    await getSearchEngine().remove(id)
+    bus.emit(BusEvent.IMAGE_REMOVED, id)
+    return true
+  }
+
   ipcMain.handle(IPC.IMG_PAGE, (_e, q: PageQuery) => imageRepo.page(q))
 
   ipcMain.handle(IPC.IMG_GET, (_e, id: number) => imageRepo.get(id))
@@ -81,18 +96,16 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   })
 
   ipcMain.handle(IPC.IMG_DELETE, async (_e, id: number) => {
-    const img = imageRepo.get(id)
-    if (!img) return false
-    // 移到回收站
-    try {
-      if (fs.existsSync(img.path)) await shell.trashItem(img.path)
-    } catch {
-      /* 忽略 */
+    return deleteOne(id)
+  })
+
+  // 批量删除：逐张移入回收站并清理索引/向量，返回成功删除的数量
+  ipcMain.handle(IPC.IMG_DELETE_MANY, async (_e, ids: number[]) => {
+    let deleted = 0
+    for (const id of ids) {
+      if (await deleteOne(id)) deleted++
     }
-    imageRepo.removeByPath(img.path)
-    await getSearchEngine().remove(id)
-    bus.emit(BusEvent.IMAGE_REMOVED, id)
-    return true
+    return deleted
   })
 
   // 读取任意本地图片的元信息：外部查询图未入库，对比视图需要它来展示尺寸/体积差异

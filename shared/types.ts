@@ -117,6 +117,7 @@ export const IPC = {
   IMG_THUMB: 'img:thumb',
   IMG_FAVORITE: 'img:favorite',
   IMG_DELETE: 'img:delete',
+  IMG_DELETE_MANY: 'img:delete-many',
   IMG_FILE_META: 'img:file-meta',
   // 搜索
   SEARCH_BY_TEXT: 'search:text',
