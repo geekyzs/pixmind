@@ -23,29 +23,6 @@ PixMind 是一款**完全离线运行**的桌面应用，用 AI 语义理解来�
   <img src="./docs/screenshots/overview.png" alt="PixMind 主界面" width="820">
 </p>
 
-<table>
-  <tr>
-    <td width="50%">
-      <img src="./docs/screenshots/text-search.png" alt="文本搜图" width="100%"><br>
-      <sub><b>文本搜图</b>：输入自然语言描述，按相似度召回</sub>
-    </td>
-    <td width="50%">
-      <img src="./docs/screenshots/image-search.png" alt="以图搜图" width="100%"><br>
-      <sub><b>以图搜图</b>：绿色角标标注「极相似」结果</sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <img src="./docs/screenshots/preview.png" alt="图片预览" width="100%"><br>
-      <sub><b>预览与标签</b>：查看元信息、管理标签</sub>
-    </td>
-    <td width="50%">
-      <img src="./docs/screenshots/light-theme.png" alt="亮色主题" width="100%"><br>
-      <sub><b>双主题</b>：内置暗色 / 亮色切换</sub>
-    </td>
-  </tr>
-</table>
-
 ---
 
 ## 目录

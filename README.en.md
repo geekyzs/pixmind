@@ -25,29 +25,6 @@ English · [简体中文](./README.md)
   <img src="./docs/screenshots/overview.png" alt="PixMind main window" width="820">
 </p>
 
-<table>
-  <tr>
-    <td width="50%">
-      <img src="./docs/screenshots/text-search.png" alt="Text-to-image search" width="100%"><br>
-      <sub><b>Text search</b> — describe a scene in natural language</sub>
-    </td>
-    <td width="50%">
-      <img src="./docs/screenshots/image-search.png" alt="Reverse image search" width="100%"><br>
-      <sub><b>Image search</b> — green badges mark near-identical matches</sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <img src="./docs/screenshots/preview.png" alt="Preview drawer" width="100%"><br>
-      <sub><b>Preview & tags</b> — inspect metadata, manage tags</sub>
-    </td>
-    <td width="50%">
-      <img src="./docs/screenshots/light-theme.png" alt="Light theme" width="100%"><br>
-      <sub><b>Dual themes</b> — built-in dark / light modes</sub>
-    </td>
-  </tr>
-</table>
-
 ---
 
 ## Table of Contents
