@@ -222,6 +222,7 @@ async function onDeleteSelected() {
 <style scoped>
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 16px;
   padding: 12px 20px;
@@ -229,7 +230,8 @@ async function onDeleteSelected() {
   background: var(--pm-bg);
 }
 .search-box {
-  flex: 1;
+  flex: 1 1 240px;
+  min-width: 200px;
   max-width: 560px;
 }
 .filters {
