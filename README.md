@@ -13,10 +13,44 @@ PixMind 是一款**完全离线运行**的桌面应用，用 AI 语义理解来�
 
 **所有图片、数据库与模型推理都在你的电脑上完成，不上传、不联网、不依赖任何云服务。**
 
+[English](./README.en.md) · 简体中文
+
+---
+
+## 界面预览
+
+<p align="center">
+  <img src="./docs/screenshots/overview.png" alt="PixMind 主界面" width="820">
+</p>
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="./docs/screenshots/text-search.png" alt="文本搜图" width="100%"><br>
+      <sub><b>文本搜图</b>：输入自然语言描述，按相似度召回</sub>
+    </td>
+    <td width="50%">
+      <img src="./docs/screenshots/image-search.png" alt="以图搜图" width="100%"><br>
+      <sub><b>以图搜图</b>：绿色角标标注「极相似」结果</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="./docs/screenshots/preview.png" alt="图片预览" width="100%"><br>
+      <sub><b>预览与标签</b>：查看元信息、管理标签</sub>
+    </td>
+    <td width="50%">
+      <img src="./docs/screenshots/light-theme.png" alt="亮色主题" width="100%"><br>
+      <sub><b>双主题</b>：内置暗色 / 亮色切换</sub>
+    </td>
+  </tr>
+</table>
+
 ---
 
 ## 目录
 
+- [界面预览](#界面预览)
 - [特性](#特性)
 - [技术栈](#技术栈)
 - [架构与目录](#架构与目录)
@@ -158,7 +192,7 @@ npm run build:linux   # Linux AppImage
 
 | 工作流 | 触发条件 | 作用 |
 | --- | --- | --- |
-| `.github/workflows/ci.yml` | push / PR 到 `main` | 类型检查 + 编译验证（不打包，反馈快） |
+| `.github/workflows/ci.yml` | push / PR 到 `main`、`develop` | 类型检查 + 编译验证（不打包，反馈快） |
 | `.github/workflows/build.yml` | 推送 `v*` 标签，或手动触发 | 并行构建四平台安装包并创建 Release |
 
 发布一个新版本：
