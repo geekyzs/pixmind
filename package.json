@@ -48,7 +48,7 @@
     "directories": {
       "output": "release"
     },
-    "files": [
+    "files":  [
       "dist",
       "dist-electron"
     ],
