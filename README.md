@@ -126,11 +126,11 @@ PixMind/
 
 ```bash
 # 1. 克隆并安装依赖（postinstall 会自动重建原生模块）
-git clone https://github.com/<your-name>/PixMind.git
-cd PixMind
+git clone https://github.com/geekyzs/pixmind.git
+cd pixmind
 npm install
 
-# 2. 下载 CLIP 模型（必需，约 500MB，从 Hugging Face 拉取）
+# 2. 下载 CLIP 模型（必需，约 580MB，从 Hugging Face 拉取）
 npm run download-models
 
 # 3. 启动开发模式（Vite 前端 + Electron 主进程一起拉起）
@@ -268,13 +268,14 @@ export function createSearchEngine(type: EngineType = 'memory'): VectorSearchEng
 
 模型文件体积较大，**未纳入版本库**（见 `.gitignore`），需自行获取到 `models/` 目录：
 
-```
-models/
-├── clip-image-vit-32.onnx   # 图像编码器
-├── clip-text-vit-32.onnx    # 文本编码器
-├── vocab.json               # BPE 词表
-└── merges.txt               # BPE merges 规则
-```
+| 文件 | 说明 | 体积 |
+| --- | --- | --- |
+| `clip-image-vit-32.onnx` | 图像编码器 | 约 335 MB |
+| `clip-text-vit-32.onnx` | 文本编码器 | 约 242 MB |
+| `vocab.json` | BPE 词表 | 约 0.8 MB |
+| `merges.txt` | BPE merges 规则 | 约 0.5 MB |
+
+合计约 580 MB。
 
 ### 自动下载
 
