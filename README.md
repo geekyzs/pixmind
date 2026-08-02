@@ -383,7 +383,12 @@ CPU 推理下 CLIP ViT-B/32 单张约几十到上百毫秒，编码在 Worker �
 
 ## 贡献
 
-欢迎 Issue 与 PR。提交前请确保：
+欢迎 Issue 与 PR。
+
+项目采用简化的 GitHub Flow：`main` 为稳定发布分支，`develop` 为集成分支，
+功能开发请从 `develop` 切出 `feature/*` 分支，完成后向 `develop` 发起 PR。
+
+提交前请确保：
 
 ```bash
 npm run typecheck   # 类型检查通过
@@ -391,6 +396,8 @@ npm run typecheck   # 类型检查通过
 
 代码风格上请沿用现有分层约定：UI 只与 Pinia store 交互，
 业务逻辑放在主进程对应模块，跨端类型统一写入 `shared/types.ts`。
+
+详细约定见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 
 ---
 
