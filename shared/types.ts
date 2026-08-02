@@ -44,6 +44,21 @@ export interface SearchResult {
   score: number
 }
 
+/**
+ * 任意本地图片文件的元信息
+ * 用于「以图搜图」的查询图：外部上传/拖入的图片并未入库，
+ * 没有 ImageRecord，但对比视图仍需展示其尺寸、体积等信息。
+ */
+export interface FileMeta {
+  path: string
+  filename: string
+  width: number
+  height: number
+  size: number
+  format: string
+  mtime: number
+}
+
 /** 搜索过滤条件 */
 export interface SearchFilter {
   keyword?: string
@@ -102,6 +117,7 @@ export const IPC = {
   IMG_THUMB: 'img:thumb',
   IMG_FAVORITE: 'img:favorite',
   IMG_DELETE: 'img:delete',
+  IMG_FILE_META: 'img:file-meta',
   // 搜索
   SEARCH_BY_TEXT: 'search:text',
   SEARCH_BY_IMAGE: 'search:image',

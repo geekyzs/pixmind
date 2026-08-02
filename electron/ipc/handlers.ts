@@ -1,7 +1,9 @@
 import { ipcMain, dialog, BrowserWindow, shell } from 'electron'
 import fs from 'node:fs'
+import path from 'node:path'
+import sharp from 'sharp'
 import { IPC } from '../../shared/types'
-import type { PageQuery, SearchFilter, AppSettings } from '../../shared/types'
+import type { PageQuery, SearchFilter, AppSettings, FileMeta } from '../../shared/types'
 import { dirRepo, imageRepo, tagRepo, settingsRepo, embeddingRepo } from '../db/repository'
 import { scanDir } from '../scanner/scanner'
 import { watchManager } from '../scanner/watcher'
@@ -9,6 +11,7 @@ import { embeddingManager } from '../embedding/embeddingManager'
 import { searchService } from '../search/searchService'
 import { getSearchEngine } from '../search/engineFactory'
 import { getThumbnail } from '../scanner/thumbnail'
+import { getFormat } from '../scanner/fileUtils'
 import { bus, BusEvent } from '../core/bus'
 import type { TaskProgress } from '../../shared/types'
 
@@ -90,6 +93,33 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     await getSearchEngine().remove(id)
     bus.emit(BusEvent.IMAGE_REMOVED, id)
     return true
+  })
+
+  // 读取任意本地图片的元信息：外部查询图未入库，对比视图需要它来展示尺寸/体积差异
+  ipcMain.handle(IPC.IMG_FILE_META, async (_e, filePath: string): Promise<FileMeta | null> => {
+    try {
+      const stat = await fs.promises.stat(filePath)
+      let width = 0
+      let height = 0
+      try {
+        const meta = await sharp(filePath).metadata()
+        width = meta.width || 0
+        height = meta.height || 0
+      } catch {
+        // 元数据读取失败不影响其余字段
+      }
+      return {
+        path: filePath,
+        filename: path.basename(filePath),
+        width,
+        height,
+        size: stat.size,
+        format: getFormat(filePath),
+        mtime: Math.floor(stat.mtimeMs)
+      }
+    } catch {
+      return null
+    }
   })
 
   /* ------------------------------- 搜索 -------------------------------- */

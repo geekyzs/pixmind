@@ -8,12 +8,21 @@ import { ElMessage } from 'element-plus'
  * 顶部工具栏：文本搜图、上传图片搜相似、关键词筛选、排序、网格大小调节、搜索结果标识。
  */
 const store = useAppStore()
-const { settings, searchMode, searchLabel, total, displayImages, sortBy, order } =
+const { settings, searchMode, searchLabel, total, displayImages, sortBy, order, querySource, canCompare } =
   storeToRefs(store)
+
+const emit = defineEmits<{
+  (e: 'compare'): void
+}>()
 
 const searchText = ref('')
 const keyword = ref('')
 const uploading = ref(false)
+
+/** 被搜图缩略图：让用户始终知道当前结果是基于哪张图检索的 */
+const querySrc = computed(() =>
+  querySource.value ? `pixmind://${encodeURIComponent(querySource.value.path)}` : ''
+)
 
 async function onSearch() {
   if (searchText.value.trim()) {
@@ -82,6 +91,23 @@ const sortValue = computed(() => `${sortBy.value}:${order.value}`)
       <el-icon><UploadFilled /></el-icon>
       <span class="btn-text">上传图片搜相似</span>
     </el-button>
+
+    <div v-if="querySource" class="query-chip" :title="querySource.path">
+      <img :src="querySrc" alt="被搜图" />
+      <div class="q-text">
+        <span class="q-title">被搜图</span>
+        <span class="q-name">{{ querySource.filename }}</span>
+      </div>
+      <el-button
+        size="small"
+        type="primary"
+        :disabled="!canCompare"
+        @click="emit('compare')"
+      >
+        <el-icon><Switch /></el-icon>
+        <span class="btn-text">对比</span>
+      </el-button>
+    </div>
 
     <div class="filters">
       <el-input
@@ -157,5 +183,37 @@ const sortValue = computed(() => `${sortBy.value}:${order.value}`)
 }
 .btn-text {
   margin-left: 4px;
+}
+.query-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 4px 4px;
+  border: 1px solid var(--pm-border);
+  border-radius: 8px;
+  background: var(--pm-bg-soft);
+  flex-shrink: 0;
+}
+.query-chip img {
+  width: 34px;
+  height: 34px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+.q-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  max-width: 130px;
+}
+.q-title {
+  font-size: 11px;
+  color: var(--pm-text-soft);
+}
+.q-name {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

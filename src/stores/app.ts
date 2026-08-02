@@ -6,8 +6,22 @@ import type {
   Tag,
   SearchFilter,
   TaskProgress,
-  AppSettings
+  AppSettings,
+  FileMeta
 } from '@shared/types'
+
+/**
+ * 查询源（即「被搜图」）
+ * 以图搜图时记录本次检索所用的图片，供结果对比视图作为基准图使用。
+ * 库内图片带 imageId，外部上传/拖入的图片只有路径与文件元信息。
+ */
+export interface QuerySource {
+  kind: 'library' | 'external'
+  path: string
+  filename: string
+  imageId?: number
+  meta?: FileMeta | null
+}
 
 /**
  * 将 Vue reactive 对象转为可结构化克隆的纯对象。
@@ -45,6 +59,8 @@ export const useAppStore = defineStore('app', () => {
   const searchScores = ref<Map<number, number>>(new Map())
   const searchMode = ref<'none' | 'text' | 'image'>('none')
   const searchLabel = ref('')
+  // 本次以图搜图的「被搜图」，文本搜图时为 null
+  const querySource = ref<QuerySource | null>(null)
 
   const progress = ref<TaskProgress>({ type: 'scan', total: 0, done: 0, running: false })
   const loading = ref(false)
@@ -56,6 +72,10 @@ export const useAppStore = defineStore('app', () => {
   /* --------------------------- getters --------------------------- */
   const displayImages = computed(() => (searchResults.value ? searchResults.value : images.value))
   const isSearching = computed(() => searchMode.value !== 'none')
+  /** 只有以图搜图且存在结果时才能进入「被搜图 vs 结果」对比 */
+  const canCompare = computed(
+    () => !!querySource.value && !!searchResults.value && searchResults.value.length > 0
+  )
   const progressPercent = computed(() =>
     progress.value.total > 0 ? Math.round((progress.value.done / progress.value.total) * 100) : 0
   )
@@ -161,6 +181,7 @@ export const useAppStore = defineStore('app', () => {
     loading.value = true
     try {
       const results = await window.api.searchByText(text, 200, plain(filter.value))
+      querySource.value = null
       applySearchResults(results, 'text', `文本："${text}"`)
     } finally {
       loading.value = false
@@ -171,6 +192,27 @@ export const useAppStore = defineStore('app', () => {
     loading.value = true
     try {
       const results = await window.api.searchByImage({ imageId }, 200, plain(filter.value))
+      const img =
+        images.value.find((i) => i.id === imageId) ??
+        searchResults.value?.find((i) => i.id === imageId) ??
+        (await window.api.imgGet(imageId))
+      querySource.value = img
+        ? {
+            kind: 'library',
+            imageId,
+            path: img.path,
+            filename: img.filename,
+            meta: {
+              path: img.path,
+              filename: img.filename,
+              width: img.width,
+              height: img.height,
+              size: img.size,
+              format: img.format,
+              mtime: img.mtime
+            }
+          }
+        : null
       applySearchResults(results, 'image', '以图搜图')
     } finally {
       loading.value = false
@@ -181,6 +223,14 @@ export const useAppStore = defineStore('app', () => {
     loading.value = true
     try {
       const results = await window.api.searchByImage({ filePath }, 200, plain(filter.value))
+      // 外部图片未入库，需单独读取文件元信息用于对比展示
+      const meta = await window.api.imgFileMeta(filePath)
+      querySource.value = {
+        kind: 'external',
+        path: filePath,
+        filename: meta?.filename ?? filePath.split(/[/\\]/).pop() ?? filePath,
+        meta
+      }
       applySearchResults(results, 'image', '以图搜图（外部）')
     } finally {
       loading.value = false
@@ -211,6 +261,13 @@ export const useAppStore = defineStore('app', () => {
     searchScores.value = new Map()
     searchMode.value = 'none'
     searchLabel.value = ''
+    querySource.value = null
+  }
+
+  /** 取某张结果图的相似度（0~1），不在结果集中则为 null */
+  function scoreOf(imageId: number): number | null {
+    const s = searchScores.value.get(imageId)
+    return s == null ? null : s
   }
 
   /* --------------------------- 图片操作 --------------------------- */
@@ -278,11 +335,13 @@ export const useAppStore = defineStore('app', () => {
     searchScores,
     searchMode,
     searchLabel,
+    querySource,
     progress,
     loading,
     // getters
     displayImages,
     isSearching,
+    canCompare,
     progressPercent,
     // actions
     loadSettings,
@@ -303,6 +362,7 @@ export const useAppStore = defineStore('app', () => {
     searchByImagePath,
     uploadAndSearch,
     clearSearch,
+    scoreOf,
     toggleFavorite,
     deleteImage,
     bindEvents

@@ -13,12 +13,15 @@ const props = defineProps<{
   itemSize: number // 单元格边长（含图片区）
   gap: number
   scores?: Map<number, number> // 搜索相似度分数
+  /** 是否允许与「被搜图」对比（仅以图搜图结果有意义） */
+  comparable?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'open', img: ImageRecord, index: number): void
   (e: 'reach-end'): void
   (e: 'context', img: ImageRecord, event: MouseEvent): void
+  (e: 'compare', img: ImageRecord): void
 }>()
 
 const container = ref<HTMLElement | null>(null)
@@ -160,6 +163,15 @@ function scoreLevel(id: number): 'high' | 'mid' | 'low' | null {
           <div v-if="!cell.img.embedded" class="badge pending" title="等待生成 Embedding">
             <el-icon><Clock /></el-icon>
           </div>
+          <button
+            v-if="comparable"
+            class="compare-btn"
+            title="与被搜图对比"
+            @click.stop="emit('compare', cell.img)"
+          >
+            <el-icon><Switch /></el-icon>
+            <span>对比</span>
+          </button>
         </div>
         <div class="label" :title="cell.img.filename">{{ cell.img.filename }}</div>
       </div>
@@ -279,6 +291,31 @@ function scoreLevel(id: number): 'high' | 'mid' | 'low' | null {
   left: 6px;
   color: #fff;
   background: rgba(0, 0, 0, 0.35);
+}
+/* 对比入口：仅 hover 时浮现，避免持续遮挡画面 */
+.compare-btn {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 8px;
+  font-size: 11px;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s;
+}
+.cell:hover .compare-btn {
+  opacity: 1;
+}
+.compare-btn:hover {
+  background: var(--pm-primary);
 }
 .empty {
   position: absolute;

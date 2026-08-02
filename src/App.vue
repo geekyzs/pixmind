@@ -6,21 +6,35 @@ import AppSidebar from '@/components/AppSidebar.vue'
 import AppToolbar from '@/components/AppToolbar.vue'
 import VirtualGrid from '@/components/VirtualGrid.vue'
 import PreviewDrawer from '@/components/PreviewDrawer.vue'
+import CompareDialog from '@/components/CompareDialog.vue'
 import StatusBar from '@/components/StatusBar.vue'
 import type { ImageRecord } from '@shared/types'
 import { ElMessage } from 'element-plus'
 
 const store = useAppStore()
-const { displayImages, settings, searchScores, isSearching } = storeToRefs(store)
+const { displayImages, settings, searchScores, isSearching, canCompare } = storeToRefs(store)
 
 const previewVisible = ref(false)
 const currentImage = ref<ImageRecord | null>(null)
+
+const compareVisible = ref(false)
+const compareTarget = ref<ImageRecord | null>(null)
 
 const gap = 14
 
 function openPreview(img: ImageRecord) {
   currentImage.value = img
   previewVisible.value = true
+}
+
+/** 打开「被搜图 vs 该结果」对比视图 */
+function openCompare(img: ImageRecord | null) {
+  if (!canCompare.value) {
+    ElMessage.info('请先进行一次以图搜图')
+    return
+  }
+  compareTarget.value = img
+  compareVisible.value = true
 }
 
 function onReachEnd() {
@@ -69,16 +83,18 @@ onMounted(async () => {
   >
     <AppSidebar />
     <main class="main">
-      <AppToolbar />
+      <AppToolbar @compare="openCompare(null)" />
       <div class="grid-area">
         <VirtualGrid
           :items="displayImages"
           :item-size="settings.gridSize"
           :gap="gap"
           :scores="isSearching ? searchScores : undefined"
+          :comparable="canCompare"
           @open="openPreview"
           @reach-end="onReachEnd"
           @context="onContext"
+          @compare="openCompare"
         />
       </div>
       <StatusBar />
@@ -87,8 +103,12 @@ onMounted(async () => {
     <PreviewDrawer
       v-model="previewVisible"
       :image="currentImage"
+      :comparable="canCompare"
       @search-similar="onSearchSimilar"
+      @compare="openCompare"
     />
+
+    <CompareDialog v-model="compareVisible" :target="compareTarget" />
 
     <div v-if="dropActive" class="drop-hint">
       <el-icon><UploadFilled /></el-icon>

@@ -9,7 +9,8 @@ import type {
   SearchResult,
   SearchFilter,
   AppSettings,
-  TaskProgress
+  TaskProgress,
+  FileMeta
 } from '../shared/types'
 
 /**
@@ -32,6 +33,8 @@ const api = {
   imgFavorite: (id: number, favorite: boolean): Promise<boolean> =>
     ipcRenderer.invoke(IPC.IMG_FAVORITE, id, favorite),
   imgDelete: (id: number): Promise<boolean> => ipcRenderer.invoke(IPC.IMG_DELETE, id),
+  imgFileMeta: (filePath: string): Promise<FileMeta | null> =>
+    ipcRenderer.invoke(IPC.IMG_FILE_META, filePath),
 
   // 搜索
   searchByText: (text: string, topK?: number, filter?: SearchFilter): Promise<SearchResult[]> =>
