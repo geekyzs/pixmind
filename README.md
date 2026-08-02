@@ -152,6 +152,33 @@ npm run build:linux   # Linux AppImage
 
 产物输出到 `release/` 目录。
 
+### 自动构建（GitHub Actions）
+
+仓库内置两条工作流：
+
+| 工作流 | 触发条件 | 作用 |
+| --- | --- | --- |
+| `.github/workflows/ci.yml` | push / PR 到 `main` | 类型检查 + 编译验证（不打包，反馈快） |
+| `.github/workflows/build.yml` | 推送 `v*` 标签，或手动触发 | 并行构建四平台安装包并创建 Release |
+
+发布一个新版本：
+
+```bash
+npm version patch        # 更新 package.json 版本号并打 tag
+git push --follow-tags   # 推送后自动构建并生成 Release
+```
+
+也可在 Actions 页面手动运行 **Build & Release**，可选择是否内置模型、是否创建 Release，
+产物会作为 Artifacts 保留 14 天，便于测试构建。
+
+构建矩阵说明：macOS 的两个架构分别在 `macos-14`(arm64) 与 `macos-13`(x64) 上构建，
+因为 `better-sqlite3`、`sharp` 等原生模块需针对宿主架构编译，
+在单个 runner 上同时产出双架构会得到无法运行的安装包。
+
+> **关于代码签名**：默认配置未启用签名（`CSC_IDENTITY_AUTO_DISCOVERY: false`）。
+> 若已有证书，可将证书与密码存入仓库 Secrets（macOS: `CSC_LINK` / `CSC_KEY_PASSWORD`；
+> Windows: `WIN_CSC_LINK` / `WIN_CSC_KEY_PASSWORD`），并移除该环境变量。
+
 ---
 
 ## 使用指南

@@ -1,0 +1,250 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      include_models:
+        description: '把 CLIP 模型打进安装包（体积 +约 600MB，用户开箱即用）'
+        type: boolean
+        default: true
+      create_release:
+        description: '构建完成后创建 GitHub Release（草稿）'
+        type: boolean
+        default: false
+
+# 同一分支/标签的重复推送只保留最新一次构建
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20'
+  # 变更此值可强制刷新模型缓存
+  MODELS_CACHE_VERSION: v1
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+
+    strategy:
+      # 某个平台失败时，其余平台继续构建，便于一次定位所有问题
+      fail-fast: false
+      matrix:
+        include:
+          # macOS 必须按架构分别在对应 runner 上构建：
+          # better-sqlite3 / sharp 等原生模块由 electron-builder install-app-deps
+          # 针对宿主架构编译，单机同时产出 x64+arm64 会得到无法运行的包
+          - name: macOS (Apple Silicon)
+            os: macos-14
+            platform: mac
+            args: --mac dmg --arm64
+            artifact: mac-arm64
+          - name: macOS (Intel)
+            os: macos-13
+            platform: mac
+            args: --mac dmg --x64
+            artifact: mac-x64
+          - name: Windows (x64)
+            os: windows-latest
+            platform: win
+            args: --win nsis --x64
+            artifact: win-x64
+          - name: Linux (x64)
+            os: ubuntu-22.04
+            platform: linux
+            args: --linux AppImage --x64
+            artifact: linux-x64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      # better-sqlite3 / sharp / onnxruntime-node 为原生模块，
+      # Windows runner 自带 MSVC Build Tools，但需确保 Python 可用于 node-gyp 回退编译
+      - name: Setup Python (node-gyp)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache Electron & electron-builder downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: ${{ runner.os }}-${{ matrix.artifact }}-electron-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.artifact }}-electron-
+
+      # postinstall 会执行 electron-builder install-app-deps，
+      # 为当前 Electron ABI 重建原生模块
+      - name: Install dependencies
+        run: npm ci
+
+      # ---------------------------------------------------------------
+      # CLIP 模型：不在版本库中，需在打包前下载到 models/
+      # ---------------------------------------------------------------
+      - name: Resolve build flags
+        id: flags
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "include_models=${{ inputs.include_models }}" >> "$GITHUB_OUTPUT"
+          else
+            # 打 tag 的正式发布始终内置模型，保证下载即用
+            echo "include_models=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Cache CLIP models
+        if: steps.flags.outputs.include_models == 'true'
+        id: models-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            models/*.onnx
+            models/vocab.json
+            models/merges.txt
+          key: clip-models-${{ env.MODELS_CACHE_VERSION }}-${{ hashFiles('scripts/download-models.mjs') }}
+
+      - name: Download CLIP models
+        if: steps.flags.outputs.include_models == 'true' && steps.models-cache.outputs.cache-hit != 'true'
+        run: npm run download-models
+
+      # 下载脚本对失败仅打印警告并继续，这里显式校验，
+      # 避免产出一个「装了却搜不了」的安装包
+      - name: Verify CLIP models
+        if: steps.flags.outputs.include_models == 'true'
+        shell: bash
+        run: |
+          node -e "
+            const fs = require('fs');
+            const required = [
+              ['models/clip-image-vit-32.onnx', 10 * 1024 * 1024],
+              ['models/clip-text-vit-32.onnx', 10 * 1024 * 1024],
+              ['models/vocab.json', 100 * 1024],
+              ['models/merges.txt', 100 * 1024]
+            ];
+            let failed = false;
+            for (const [file, min] of required) {
+              if (!fs.existsSync(file)) {
+                console.error('缺失: ' + file);
+                failed = true;
+                continue;
+              }
+              const size = fs.statSync(file).size;
+              if (size < min) {
+                console.error('文件过小(可能下载不完整): ' + file + ' = ' + size + ' bytes');
+                failed = true;
+              } else {
+                console.log('OK ' + file + ' = ' + (size / 1024 / 1024).toFixed(1) + ' MB');
+              }
+            }
+            if (failed) {
+              console.error('模型校验失败，终止构建。');
+              process.exit(1);
+            }
+          "
+
+      # ---------------------------------------------------------------
+      # 构建
+      # ---------------------------------------------------------------
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Build renderer & main process
+        run: npx vite build
+
+      - name: Package application
+        shell: bash
+        run: npx electron-builder ${{ matrix.args }} --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 未配置签名证书时，禁止 electron-builder 自动查找钥匙串身份，
+          # 否则会因找不到证书而失败。配置签名后请移除下面两行并参考 README。
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: List artifacts
+        shell: bash
+        run: ls -lh release/ || true
+
+      # 项目未集成 electron-updater，因此不收集 latest*.yml / *.blockmap
+      # （两个 macOS job 会产出同名 latest-mac.yml，汇总时将互相覆盖）
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: PixMind-${{ matrix.artifact }}
+          path: |
+            release/*.dmg
+            release/*.exe
+            release/*.AppImage
+          if-no-files-found: error
+          retention-days: 14
+          # 安装包已是压缩格式，跳过二次压缩可显著加快上传
+          compression-level: 0
+
+  # -------------------------------------------------------------------
+  # 汇总所有平台产物并创建 Release
+  # -------------------------------------------------------------------
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.create_release
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List collected files
+        run: ls -lh artifacts/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          # 手动触发时没有 tag，退化为草稿以便人工确认
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('build-{0}', github.run_number) }}
+          name: PixMind ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('build {0}', github.run_number) }}
+          draft: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          body: |
+            ## 下载
+
+            | 平台 | 文件 |
+            | --- | --- |
+            | macOS (Apple Silicon) | `PixMind-<版本>-arm64.dmg` |
+            | macOS (Intel) | `PixMind-<版本>-x64.dmg` |
+            | Windows 10/11 x64 | `PixMind-<版本>-x64.exe` |
+            | Linux x64 | `PixMind-<版本>-x64.AppImage` |
+
+            安装包已内置 CLIP ViT-B/32 模型，安装后即可使用 AI 语义搜索。
+
+            > **未进行代码签名**：macOS 首次打开需在「系统设置 → 隐私与安全性」中点击「仍要打开」，
+            > 或执行 `xattr -cr /Applications/PixMind.app`；Windows 可能出现 SmartScreen 提示，
+            > 选择「更多信息 → 仍要运行」。
+          files: |
+            artifacts/*.dmg
+            artifacts/*.exe
+            artifacts/*.AppImage
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
