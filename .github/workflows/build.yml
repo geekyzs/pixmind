@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       include_models:
-        description: '把 CLIP 模型打进安装包（体积 +约 600MB，用户开箱即用）'
+        description: '把 CLIP 模型打进安装包（体积 +约 580MB，用户开箱即用）'
         type: boolean
         default: true
       create_release:
