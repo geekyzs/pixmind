@@ -15,7 +15,8 @@ export const BusEvent = {
   TASK_PROGRESS: 'task-progress',
   IMAGE_ADDED: 'image-added',
   IMAGE_REMOVED: 'image-removed',
-  IMAGE_EMBEDDED: 'image-embedded'
+  IMAGE_EMBEDDED: 'image-embedded',
+  DATA_RESET: 'data-reset'
 } as const
 
 export function emitProgress(p: TaskProgress): void {

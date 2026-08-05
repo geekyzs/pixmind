@@ -111,6 +111,8 @@ export const IPC = {
   DIR_REMOVE: 'dir:remove',
   DIR_TOGGLE: 'dir:toggle',
   DIR_RESCAN: 'dir:rescan',
+  // 数据维护：清空所有图片/向量/标签关联并重新扫描全部目录
+  DATA_RESET: 'data:reset',
   // 图片
   IMG_PAGE: 'img:page',
   IMG_GET: 'img:get',
@@ -137,5 +139,6 @@ export const IPC = {
   EVT_TASK_PROGRESS: 'evt:task-progress',
   EVT_IMAGE_ADDED: 'evt:image-added',
   EVT_IMAGE_REMOVED: 'evt:image-removed',
-  EVT_IMAGE_EMBEDDED: 'evt:image-embedded'
+  EVT_IMAGE_EMBEDDED: 'evt:image-embedded',
+  EVT_DATA_RESET: 'evt:data-reset'
 } as const

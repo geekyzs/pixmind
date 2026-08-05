@@ -135,6 +135,29 @@ export const useAppStore = defineStore('app', () => {
     await window.api.dirRescan(id)
   }
 
+  /**
+   * 清空所有图片/向量/标签关联数据并重新扫描全部目录。
+   * 后端会清库、重置索引并在后台重新扫描+编码，
+   * 这里先本地重置视图状态，随后重新加载目录与图片列表。
+   */
+  async function resetAndRescan() {
+    loading.value = true
+    try {
+      clearSearch()
+      images.value = []
+      total.value = 0
+      offset = 0
+      noMore = false
+      await window.api.dataReset()
+      // 目录数量/图片数已变化，刷新目录与列表
+      await loadDirs()
+      await loadTags()
+      await reload()
+    } finally {
+      loading.value = false
+    }
+  }
+
   async function loadTags() {
     tags.value = await window.api.tagList()
   }
@@ -358,6 +381,14 @@ export const useAppStore = defineStore('app', () => {
       const img = images.value.find((i) => i.id === id)
       if (img) img.embedded = 1
     })
+    window.api.onDataReset(() => {
+      // 后端已清空数据：立即清空本地视图，等待重新扫描的图片通过 image-added 回填
+      clearSearch()
+      images.value = []
+      total.value = 0
+      offset = 0
+      noMore = false
+    })
   }
 
   function hasActiveFilter(): boolean {
@@ -406,6 +437,7 @@ export const useAppStore = defineStore('app', () => {
     removeDir,
     toggleDir,
     rescanDir,
+    resetAndRescan,
     loadTags,
     reload,
     loadMore,

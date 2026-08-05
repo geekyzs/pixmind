@@ -187,6 +187,20 @@ export const imageRepo = {
       .map((id) => map.get(id))
       .filter(Boolean)
       .map((it) => ({ ...(it as ImageRecord), tags: tagRepo.namesOfImage((it as ImageRecord).id) }))
+  },
+
+  /**
+   * 清空所有图片相关数据：images / embeddings / image_tags。
+   * 保留目录（dirs）、标签定义（tags）与设置（settings），
+   * 以便清空后按现有目录重新扫描重建索引。
+   */
+  clearAll(): void {
+    const db = getDb()
+    db.transaction(() => {
+      db.prepare('DELETE FROM image_tags').run()
+      db.prepare('DELETE FROM embeddings').run()
+      db.prepare('DELETE FROM images').run()
+    })()
   }
 }
 

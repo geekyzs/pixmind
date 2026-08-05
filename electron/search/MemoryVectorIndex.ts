@@ -49,31 +49,25 @@ export class MemoryVectorIndex implements VectorSearchEngine {
   }
 
   async search(query: Float32Array, topK: number, candidateIds?: Set<number>): Promise<VectorHit[]> {
+    if (topK <= 0) return []
     const q = normalize(query)
-    const heap: VectorHit[] = []
 
-    const consider = (imageId: number, vec: Float32Array) => {
-      const score = dot(q, vec)
-      if (heap.length < topK) {
-        heap.push({ imageId, score })
-        if (heap.length === topK) heap.sort((a, b) => a.score - b.score)
-      } else if (score > heap[0].score) {
-        // 替换最小值并保持有序（小顶堆的简化实现）
-        heap[0] = { imageId, score }
-        heap.sort((a, b) => a.score - b.score)
-      }
-    }
-
+    // 先计算所有候选的相似度，再统一取 topK。
+    // 一万级数据量下全量点积在毫秒级，正确性优先于此处的微优化。
+    const hits: VectorHit[] = []
     if (candidateIds) {
       for (const id of candidateIds) {
         const vec = this.vectors.get(id)
-        if (vec) consider(id, vec)
+        if (vec) hits.push({ imageId: id, score: dot(q, vec) })
       }
     } else {
-      for (const [id, vec] of this.vectors) consider(id, vec)
+      for (const [id, vec] of this.vectors) {
+        hits.push({ imageId: id, score: dot(q, vec) })
+      }
     }
 
-    return heap.sort((a, b) => b.score - a.score)
+    hits.sort((a, b) => b.score - a.score)
+    return hits.length > topK ? hits.slice(0, topK) : hits
   }
 
   size(): number {

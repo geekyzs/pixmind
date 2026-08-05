@@ -81,6 +81,30 @@ async function onRescan(id: number) {
   ElMessage.success('已开始重新扫描')
 }
 
+const resetting = ref(false)
+
+/** 清空所有图片/向量/标签关联数据并按现有目录重新扫描 */
+async function onResetAndRescan() {
+  try {
+    await ElMessageBox.confirm(
+      '将清空所有已索引的图片、向量与标签关联数据，然后按现有目录重新扫描并生成向量。此操作不会删除本地图片文件，但重新扫描与编码可能耗时较久。确定继续？',
+      '清空并重新扫描',
+      { type: 'warning', confirmButtonText: '清空并重新扫描', confirmButtonClass: 'el-button--danger' }
+    )
+  } catch {
+    return
+  }
+  resetting.value = true
+  try {
+    await store.resetAndRescan()
+    ElMessage.success('已清空数据，正在后台重新扫描并生成向量')
+  } catch {
+    ElMessage.error('清空并重新扫描失败')
+  } finally {
+    resetting.value = false
+  }
+}
+
 async function onDeleteTag(id: number) {
   await window.api.tagDelete(id)
   activeTagIds.value.delete(id)
@@ -117,9 +141,21 @@ function toggleTheme() {
     <div class="section">
       <div class="section-title">
         <span>目录</span>
-        <el-button text size="small" @click="onAddDir">
-          <el-icon><Plus /></el-icon>
-        </el-button>
+        <div class="title-actions">
+          <el-tooltip content="清空所有数据并重新扫描" placement="top">
+            <el-button
+              text
+              size="small"
+              :loading="resetting"
+              @click="onResetAndRescan"
+            >
+              <el-icon><RefreshRight /></el-icon>
+            </el-button>
+          </el-tooltip>
+          <el-button text size="small" @click="onAddDir">
+            <el-icon><Plus /></el-icon>
+          </el-button>
+        </div>
       </div>
       <div class="dir-list">
         <div
@@ -219,6 +255,11 @@ function toggleTheme() {
   color: var(--pm-text-soft);
   padding: 8px 6px 4px;
   text-transform: uppercase;
+}
+.title-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 .quick {
   display: flex;

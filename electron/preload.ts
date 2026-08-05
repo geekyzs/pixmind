@@ -25,6 +25,8 @@ const api = {
   dirToggle: (id: number, enabled: boolean): Promise<boolean> =>
     ipcRenderer.invoke(IPC.DIR_TOGGLE, id, enabled),
   dirRescan: (id: number): Promise<boolean> => ipcRenderer.invoke(IPC.DIR_RESCAN, id),
+  // 清空所有数据并重新扫描全部目录
+  dataReset: (): Promise<boolean> => ipcRenderer.invoke(IPC.DATA_RESET),
 
   // 图片
   imgPage: (q: PageQuery): Promise<PageResult<ImageRecord>> => ipcRenderer.invoke(IPC.IMG_PAGE, q),
@@ -85,6 +87,11 @@ const api = {
     const listener = (_e: unknown, id: number) => cb(id)
     ipcRenderer.on(IPC.EVT_IMAGE_EMBEDDED, listener)
     return () => ipcRenderer.off(IPC.EVT_IMAGE_EMBEDDED, listener)
+  },
+  onDataReset: (cb: () => void) => {
+    const listener = () => cb()
+    ipcRenderer.on(IPC.EVT_DATA_RESET, listener)
+    return () => ipcRenderer.off(IPC.EVT_DATA_RESET, listener)
   }
 }
 

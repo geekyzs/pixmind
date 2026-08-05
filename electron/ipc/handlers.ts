@@ -5,7 +5,7 @@ import sharp from 'sharp'
 import { IPC } from '../../shared/types'
 import type { PageQuery, SearchFilter, AppSettings, FileMeta } from '../../shared/types'
 import { dirRepo, imageRepo, tagRepo, settingsRepo, embeddingRepo } from '../db/repository'
-import { scanDir } from '../scanner/scanner'
+import { scanDir, scanAll } from '../scanner/scanner'
 import { watchManager } from '../scanner/watcher'
 import { embeddingManager } from '../embedding/embeddingManager'
 import { searchService } from '../search/searchService'
@@ -60,6 +60,29 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   ipcMain.handle(IPC.DIR_RESCAN, async (_e, id: number) => {
     await scanDir(id)
     embeddingManager.enqueuePending()
+    return true
+  })
+
+  /**
+   * 清空所有数据并重新扫描：
+   * 1. 停止所有文件监听，避免清库过程中并发写入
+   * 2. 清空 images / embeddings / image_tags（保留目录与标签定义）
+   * 3. 重置内存向量索引
+   * 4. 通知渲染进程清空列表
+   * 5. 重新对所有启用目录做全量扫描并重新生成 embedding
+   */
+  ipcMain.handle(IPC.DATA_RESET, async () => {
+    await watchManager.stopAll()
+
+    imageRepo.clearAll()
+    await getSearchEngine().init()
+
+    // 通知前端立即清空当前列表
+    bus.emit(BusEvent.DATA_RESET)
+
+    // 重新监听 + 全量扫描 + 重新编码（后台执行，不阻塞返回）
+    watchManager.start()
+    scanAll().then(() => embeddingManager.enqueuePending())
     return true
   })
 
@@ -210,4 +233,5 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   bus.on(BusEvent.IMAGE_ADDED, (img) => send(IPC.EVT_IMAGE_ADDED, img))
   bus.on(BusEvent.IMAGE_REMOVED, (id) => send(IPC.EVT_IMAGE_REMOVED, id))
   bus.on(BusEvent.IMAGE_EMBEDDED, (id) => send(IPC.EVT_IMAGE_EMBEDDED, id))
+  bus.on(BusEvent.DATA_RESET, () => send(IPC.EVT_DATA_RESET))
 }
